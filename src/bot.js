@@ -1,3 +1,4 @@
+import http from "node:http";
 import "dotenv/config";
 import { Bot, Keyboard } from "grammy";
 
@@ -57,18 +58,45 @@ import {
 } from "./utils/format.js";
 
 // ========================================
-// Environment Variables
+// Environment Variables & Sanitization
 // ========================================
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
+const rawToken = process.env.TELEGRAM_BOT_TOKEN;
 
-if (!token) {
-  throw new Error("TELEGRAM_BOT_TOKEN is missing from .env");
+if (!rawToken || rawToken.trim() === "" || rawToken.includes("your_telegram_bot_token")) {
+  console.error("❌ ERROR: TELEGRAM_BOT_TOKEN is missing or not set properly in environment variables!");
+  console.error("👉 Please go to your Render Dashboard -> Environment and add TELEGRAM_BOT_TOKEN.");
+  throw new Error("TELEGRAM_BOT_TOKEN is missing or invalid.");
+}
+
+// Clean token: strip surrounding quotes and extra whitespace often introduced when copy-pasting in cloud UIs
+const token = rawToken.trim().replace(/^["']|["']$/g, "").trim();
+
+if (!/^\d+:[A-Za-z0-9_-]+$/.test(token)) {
+  console.warn("⚠️ WARNING: TELEGRAM_BOT_TOKEN format looks suspicious.");
+  console.warn(`Expected format like: 123456789:ABCdefGHI...`);
+  console.warn(`Token starts with: "${token.slice(0, 10)}..." (length: ${token.length})`);
+  console.warn("If you see quotes or invalid characters, check your Render Environment Variables.");
 }
 
 if (!process.env.GEMINI_API_KEY) {
-  throw new Error("GEMINI_API_KEY is missing from .env");
+  throw new Error("GEMINI_API_KEY is missing from environment variables.");
 }
+
+// ========================================
+// Lightweight HTTP Server (For Render Web Service)
+// ========================================
+
+// Render Web Services expect an open port; this keeps the free tier service healthy
+const port = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ status: "ok", bot: "FinanceBot", timestamp: new Date().toISOString() }));
+});
+
+server.listen(port, () => {
+  console.log(`🌐 Health check server listening on port ${port}`);
+});
 
 // ========================================
 // Create Telegram Bot
